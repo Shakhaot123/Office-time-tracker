@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Office Time Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f6f9;--card:#fff;--ink:#14202e;--mute:#5d6b7b;--line:#d9e0e8;--acc:#0f766e;--acc-ink:#fff;--good:#0f766e;--bad:#b42318;--sub:#eef3f7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101820;--card:#18232e;--ink:#e8eef4;--mute:#93a1b0;--line:#2b3947;--acc:#2dd4bf;--acc-ink:#062a26;--good:#2dd4bf;--bad:#ff8a80;--sub:#142029}}
+:root[data-theme="dark"]{--bg:#101820;--card:#18232e;--ink:#e8eef4;--mute:#93a1b0;--line:#2b3947;--acc:#2dd4bf;--acc-ink:#062a26;--good:#2dd4bf;--bad:#ff8a80;--sub:#142029}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+main{max-width:1260px;margin:0 auto;padding:28px 16px 48px}
+h1{font-size:1.9rem;margin:0 0 4px;letter-spacing:-.02em}
+p.sub{margin:0 0 22px;color:var(--mute)}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.box small{display:block;color:var(--mute);font-size:.85rem}
+.box b{font-size:1.7rem;font-variant-numeric:tabular-nums}
+.box.main{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.box.main small{color:inherit;opacity:.85}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.box.main .pos,.box.main .neg{color:inherit}
+.set{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin-bottom:14px}
+label{font-size:.85rem;color:var(--mute);display:flex;flex-direction:column;gap:6px}
+input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+input[type="number"]{appearance:textfield;text-align:center}
+input[type="number"]::-webkit-inner-spin-button,input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#req{text-align:center}
+input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.field-error{color:var(--bad);font-size:.75rem}
+.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.day{border-top: 1px solid var(--line);cursor:pointer}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap}
+th{font-size:.85rem;color:var(--mute);font-weight:600}
+tr:last-child td{border-bottom:0}
+td input{width:100%}
+td.num{font-variant-numeric:tabular-nums;font-weight:600}
+td.act{white-space:nowrap}
+.end{text-align: end;}
+.actions{display:flex;gap:6px;align-items:center;justify-content: end;}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease}
+button:hover{border-color:var(--acc);box-shadow:0 2px 8px #0002;transform:translateY(-1px)}
+button:active{transform:translateY(0);box-shadow:none}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:600}
+button.pri:hover{filter:brightness(1.08)}
+button.x{padding:4px 9px;color:var(--mute)}
+button.tg{padding:4px 10px;font-weight:700;display:flex;align-items:center;gap:6px}
+button.tg.open{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.cnt{min-width:28px;text-align:center;font-size:.75rem;font-weight:600;font-variant-numeric:tabular-nums;background:var(--sub);color:var(--ink);border-radius:99px;padding:0 7px}
+button.tg.open .cnt{background:var(--acc-ink);color:var(--acc)}
+.sendTeams{display: none;}
+@media(prefers-reduced-motion:reduce){button{transition:none}button:hover,button:active{transform:none}}
+tr.detail td{background:var(--sub);white-space:normal;padding:0}
+.detail-content{height:0;opacity:0;overflow:hidden;transition:height .28s ease,opacity .2s ease}
+.detail-content.open{opacity:1}
+.detail-inner{padding:12px 14px 14px}
+@media(prefers-reduced-motion:reduce){.detail-content{transition:none}}
+.th{font-weight:600;margin-bottom:8px}
+.task-head,.task,.break-row{display:grid;grid-template-columns:minmax(300px,3fr) minmax(130px,1fr) minmax(130px,1fr) 90px minmax(130px,1fr) 40px;gap:8px;align-items:center;min-width:830px}
+.task-head{font-size:.85rem;color:var(--mute);font-weight:600;margin-bottom:6px}
+.task,.break-row{margin-bottom:8px}
+.task .tn,.task input[type="time"],.task select{width:100%;min-width:0}
+.break-row input[type="time"]{width:100%;min-width:0}
+.break-name{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-weight:600;text-align:center}
+.task select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.task-total{font-variant-numeric:tabular-nums;font-weight:600}
+.task-list{overflow-x:auto}
+.task-list input[type="time"]{padding:8px 6px}
+.tbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:4px}
+.tbar button{padding:6px 12px}
+.tsum{font-size:.9rem;color:var(--mute)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.date-cell{display:flex;align-items:center;gap:8px}
+.date-cell input{flex:1;min-width:145px}
+.day-type-label{display:flex;align-items:center;justify-content:center;min-height:42px;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--card);font-weight:600;text-align:center}
+.day-type-label.offday{color:#8a4b08}
+.day-type-label.holiday{color:#9b1c31}
+.day-note{display:block;width:100%;min-height:110px;margin-top:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;resize:vertical;white-space:pre-wrap}
+.note{color:var(--mute);font-size:.85rem;margin-top:12px}
+.sheet-setup{margin-top:16px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.sheet-setup summary{cursor:pointer;font-weight:600}
+.sheet-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-top:12px}
+.sheet-controls label{flex:1;min-width:260px}
+.sheet-controls input{width:100%}
+.sheet-status{font-size:.85rem;color:var(--mute);margin:8px 0 0}
+dialog{width:min(440px,calc(100% - 32px));padding:22px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 16px 48px #0004}
+dialog::backdrop{background:#0008}
+dialog h2{margin:0 0 8px;font-size:1.25rem}
+dialog p{margin:0 0 14px;color:var(--mute)}
+.clear-confirm{width:100%;margin-bottom:14px}
+.clear-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+button:disabled{cursor:not-allowed;opacity:.5;transform:none;box-shadow:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Office Time Calculator</h1>
+  <p class="sub">Enter in-time and out-time for each day. Tap + on a day to log the tasks you did and how long each took.</p>
+
+  <section class="sum" aria-live="polite">
+    <div class="box main"><small>Total worked</small><b id="tWork">0h 00m</b></div>
+    <div class="box"><small>Required</small><b id="tReq">0h 00m</b></div>
+    <div class="box"><small id="dLabel">Overtime / short</small><b id="tDiff">0h 00m</b></div>
+    <div class="box"><small>Days counted</small><b id="tDays">0</b></div>
+  </section>
+
+  <div class="set">
+    <label>Required hours per day
+      <input id="req" type="text" value="8H : 00M" placeholder="7H : 40M" aria-describedby="reqError" style="width:150px">
+      <small id="reqError" class="field-error" hidden>Use format 7H : 40M (minutes 00–59).</small>
+    </label>
+    <label>Default break (minutes)
+      <input id="brk" type="number" min="0" step="5" value="60" style="width:130px">
+    </label>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Sign In</th><th>Sign Out</th><th>Break (min)</th><th>Worked</th><th>Vs required</th><th class="end">Tasks</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="bar">
+    <button class="pri" id="add">Add day</button>
+    <button id="addOffDay">Off day</button>
+    <button id="addHoliday">Holiday</button>
+    <button id="now">Set current time as In / Out</button>
+    <button id="clear">Clear all</button>
+  </div>
+  <dialog id="clearDialog" aria-labelledby="clearDialogTitle" aria-describedby="clearDialogDescription">
+    <h2 id="clearDialogTitle">Important Notice</h2>
+    <p id="clearDialogDescription">Type CLEAR in capital letters to enable either option. “Clear browser” keeps Google Sheets unchanged. “Clear all” also clears the connected Google Sheet.</p>
+    <label class="clear-confirm">Type "CLEAR" to confirm
+      <input id="clearConfirm" type="text" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="clear-actions">
+      <button id="cancelClear">Cancel</button>
+      <button id="clearBrowser" disabled>Clear browser</button>
+      <button class="pri" id="clearEverywhere" disabled>Clear all</button>
+    </div>
+  </dialog>
+  <p class="note">If Out is earlier than In, it is counted as a night shift (next day). Your entries are saved in this browser.</p>
+  <details class="sheet-setup">
+    <summary>Google Sheets auto-save</summary>
+    <div class="sheet-controls">
+      <label>Apps Script Web App URL
+        <input id="sheetUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="url">
+      </label>
+      <button class="pri" id="saveSheetUrl">Connect / Save URL</button>
+      <button id="disconnectSheet">Disconnect</button>
+    </div>
+    <p id="sheetStatus" class="sheet-status" aria-live="polite">Not connected. Your entries are saved in this browser only.</p>
+    <p class="note">After connecting, changes are sent to a dedicated “Office Time Data” tab. The web app URL is public; anyone who has it may overwrite that tab. Keep the URL private and use a dedicated spreadsheet.</p>
+  </details>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEY = "office-time-v1";
+const SHEET_URL_KEY = "office-time-sheet-url-v1";
+let rows = [];
+let requiredMinutes = 480;
+let sheetSaveTimer;
+let sheetSyncing = false;
+let sheetSyncPending = false;
+let sheetSyncPendingPayload = null;
+
+function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function hhmm(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function mins(t){ if(!t) return null; const [h,m]=t.split(":").map(Number); return h*60+m; }
+function fmt(m){ const s=m<0?"-":""; m=Math.abs(Math.round(m)); return s+Math.floor(m/60)+"h "+String(m%60).padStart(2,"0")+"m"; }
+function parseRequiredMinutes(value){
+  const match=value.trim().match(/^(\d{1,2})\s*(?:h\s*:\s*|:)\s*(\d{1,2})\s*m?$/i);
+  if(!match) return null;
+  const hours=Number(match[1]), minutes=Number(match[2]);
+  if(hours>24||minutes>59||(hours===24&&minutes>0)) return null;
+  return hours*60+minutes;
+}
+function formatRequiredMinutes(value){ return `${Math.floor(value/60)}H : ${String(value%60).padStart(2,"0")}M`; }
+function loggedBreakMins(r){
+  const durations=r.breaks.map(taskMins).filter(duration=>duration!==null);
+  return durations.length ? durations.reduce((sum,duration)=>sum+duration,0) : null;
+}
+function effectiveBreak(r){ return loggedBreakMins(r)??(Number(r.brk)||0); }
+function worked(r){
+  const a=mins(r.in), b=mins(r.out);
+  if(a===null||b===null) return null;
+  let d=b-a; if(d<0) d+=1440;
+  return Math.max(0, d-effectiveBreak(r));
+}
+function shiftMinutes(r){
+  const a=mins(r.in), b=mins(r.out);
+  if(a===null||b===null) return null;
+  return (b-a+1440)%1440;
+}
+function taskMins(t){
+  const a=mins(t.start), b=mins(t.end);
+  if(a!==null&&b!==null) return (b-a+1440)%1440;
+  if(a===null&&b===null&&Number.isFinite(t.legacyMins)) return t.legacyMins;
+  return null;
+}
+function newRow(dayType="workday"){ return {date:today(), dayType, in:"", out:"", brk:Number($("brk").value)||0, tasks:[], breaks:[], open:false}; }
+
+function save(syncToSheets=true){
+  try{ localStorage.setItem(KEY, JSON.stringify({rows, req:formatRequiredMinutes(requiredMinutes), brk:$("brk").value})); }catch(e){}
+  if(syncToSheets) scheduleSheetSave();
+}
+function sheetPayload(){
+  return {
+    rows: rows.map(r=>({
+      date:r.date,
+      dayType:r.dayType||"workday",
+      note:r.note||"",
+      in:r.in,
+      out:r.out,
+      breakMinutes:effectiveBreak(r),
+      workedMinutes:worked(r),
+      totalWorkMinutes:shiftMinutes(r),
+      requiredMinutes,
+      differenceMinutes:worked(r)===null?null:worked(r)-requiredMinutes,
+      tasks:r.tasks.map(t=>({
+        name:t.name||"",
+        start:t.start||"",
+        end:t.end||"",
+        durationMinutes:taskMins(t),
+        status:t.status||"Not started"
+      })),
+      breaks:r.breaks.map(b=>({
+        start:b.start||"",
+        end:b.end||"",
+        durationMinutes:taskMins(b)
+      }))
+    }))
+  };
+}
+function scheduleSheetSave(){
+  clearTimeout(sheetSaveTimer);
+  if(!localStorage.getItem(SHEET_URL_KEY)) return;
+  $("sheetStatus").textContent="Changes saved in this browser. Sending to Google Sheets…";
+  sheetSaveTimer=setTimeout(syncToSheet,900);
+}
+async function syncToSheet(payload){
+  if(sheetSyncing){
+    sheetSyncPending=true;
+    sheetSyncPendingPayload=payload||null;
+    return;
+  }
+  const url=localStorage.getItem(SHEET_URL_KEY);
+  if(!url) return;
+  sheetSyncing=true;
+  $("sheetStatus").textContent="Sending current entries to Google Sheets…";
+  try{
+    await fetch(url,{
+      method:"POST",
+      mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=UTF-8"},
+      body:JSON.stringify(payload||sheetPayload())
+    });
+    $("sheetStatus").textContent="Sync request sent. Check the “Office Time Data” tab to confirm it arrived.";
+  }catch(error){
+    $("sheetStatus").textContent="Could not send data to Google Sheets. Check the URL and your internet connection.";
+    console.error("Could not sync office time data to Google Sheets",error);
+  }finally{
+    sheetSyncing=false;
+    if(sheetSyncPending){
+      const pendingPayload=sheetSyncPendingPayload;
+      sheetSyncPending=false;
+      sheetSyncPendingPayload=null;
+      syncToSheet(pendingPayload);
+    }
+  }
+}
+function validSheetUrl(value){
+  try{
+    const url=new URL(value.trim());
+    return url.protocol==="https:"&&url.hostname==="script.google.com"&&/^\/macros\/s\/[^/]+\/exec\/?$/.test(url.pathname);
+  }catch(error){
+    return false;
+  }
+}
+function load(){
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY)||"null");
+    if(s){
+      rows=s.rows||[];
+      const savedRequired=parseRequiredMinutes(String(s.req??""));
+      requiredMinutes=savedRequired??Math.round((Number(s.req)||8)*60);
+      $("req").value=formatRequiredMinutes(requiredMinutes);
+      $("brk").value=s.brk||60;
+    }
+  }catch(e){}
+  rows.forEach(r=>{
+    if(!["workday","offday","holiday"].includes(r.dayType)) r.dayType="workday";
+    r.breaks=r.breaks||[];
+    r.tasks=(r.tasks||[]).map(t=>{
+      if(t.start===undefined&&t.end===undefined&&(t.h!==undefined||t.m!==undefined)&&(t.h!==""||t.m!==""))
+        t.legacyMins=(Number(t.h)||0)*60+(Number(t.m)||0);
+      t.start=t.start||""; t.end=t.end||"";
+      if(!["Not started","In progress","Completed"].includes(t.status)) t.status="Not started";
+      return t;
+    });
+    r.open=!!r.open;
+  });
+  if(!rows.length) rows.push(newRow());
+  $("sheetUrl").value=localStorage.getItem(SHEET_URL_KEY)||"";
+  if($("sheetUrl").value) $("sheetStatus").textContent="Connected. Changes will be sent automatically.";
+}
+
+function render(){
+  const tb=$("rows"); tb.innerHTML="";
+  rows.forEach((r,i)=>{
+    const tr=document.createElement("tr"); tr.className="day";
+    const restDay=r.dayType==="offday"||r.dayType==="holiday";
+    const dayLabel=r.dayType==="offday"?"Off day":"Holiday";
+    tr.innerHTML=restDay
+      ? `<td><input type="date" value="${r.date}" aria-label="Date"></td>
+        <td colspan="5"><span class="day-type-label ${r.dayType}">${dayLabel}</span></td>
+        <td class="act rest-day-actions"><div class="actions"><button class="tg" aria-expanded="${r.open}" aria-label="Show or hide tasks for this day"></button><button class="x" aria-label="Remove day">✕</button></div></td>`
+      : `<td class="date-cell"><input type="date" value="${r.date}" aria-label="Date"></td>
+        <td><input type="time" value="${r.in}" aria-label="In time"></td>
+        <td><input type="time" value="${r.out}" aria-label="Out time"></td>
+        <td><input type="number" min="0" step="5" value="${r.brk}" aria-label="Break minutes" style="width:90px"></td>
+        <td class="num w"></td><td class="num v"></td>
+        <td class="act"><div class="actions"><button class="tg" aria-expanded="${r.open}" aria-label="Show or hide tasks for this day"></button><button class="x" aria-label="Remove day">✕</button></div></td>`;
+    [["date","Date"],["in","In time"],["out","Out time"],["brk","Break minutes"]].forEach(([key,label])=>{
+      const input=tr.querySelector(`input[aria-label="${label}"]`);
+      if(input) input.addEventListener("input",()=>{ r[key]=input.value; update(); save(); });
+    });
+    const toggleDay=()=>{
+      const willOpen=!r.open;
+      rows.forEach(row=>{ row.open=false; });
+      r.open=willOpen;
+      update(); save();
+    };
+    tr.addEventListener("click",event=>{
+      if(event.target.closest("input,button,select,a")) return;
+      toggleDay();
+    });
+    tr.querySelector(".tg").onclick=toggleDay;
+    tr.querySelector(".x").onclick=()=>{ rows.splice(i,1); if(!rows.length) rows.push(newRow()); render(); save(); };
+    tb.appendChild(tr);
+
+    const dt=document.createElement("tr"); dt.className="detail";
+    const td=document.createElement("td"); td.colSpan=7;
+    td.innerHTML=restDay
+      ? `<div class="detail-content${r.open?" open":""}" style="height:${r.open?"auto":"0px"}" aria-hidden="${!r.open}"><div class="detail-inner"><div class="th">Notes on this day</div>
+        <button class="addNote">Add note</button><textarea class="day-note" aria-label="Note for this day" placeholder="Write a note..." ${r.note?"":"hidden"}></textarea></div></div>`
+      : `<div class="detail-content${r.open?" open":""}" style="height:${r.open?"auto":"0px"}" aria-hidden="${!r.open}"><div class="detail-inner"><div class="th">${r.tasks.length?"Tasks on this day":"Add your today task"}</div>
+        <div class="task-list">${r.tasks.length?'<div class="task-head"><span>Task name</span><span>Start time</span><span>End time</span><span>Total</span><span>Status</span><span></span></div>':""}<div class="tl"></div><div class="breaks"></div></div>
+        <div class="tbar"><button class="addT">Add task</button>${r.tasks.length?'<button class="addBreak">Break</button>':""}${r.tasks.length||r.breaks.length?'<button class="setTaskNow">Set current time</button>':""}${r.tasks.length?'<button class="copyReport">Copy Report</button><button class="sendTeams">Send to Teams</button>':""}<span class="tsum"></span><span class="copyStatus" aria-live="polite"></span></div></div></div>`;
+    const addNote=td.querySelector(".addNote");
+    if(addNote){
+      const note=td.querySelector(".day-note");
+      note.value=r.note||"";
+      addNote.onclick=()=>{
+        note.hidden=false;
+        note.focus();
+      };
+      note.addEventListener("input",()=>{ r.note=note.value; save(); });
+    }
+    const tl=td.querySelector(".tl");
+    const breaks=td.querySelector(".breaks");
+    (restDay?[]:r.tasks).forEach((t,j)=>{
+      const d=document.createElement("div"); d.className="task";
+      d.innerHTML=`<input class="tn" type="text" placeholder="What did you work on?" aria-label="Task name">
+        <input class="ts" type="time" aria-label="Task start time">
+        <input class="te" type="time" aria-label="Task end time">
+        <span class="task-total" aria-label="Task total"></span>
+        <select class="status" aria-label="Task status"><option>Not started</option><option>In progress</option><option>Completed</option></select>
+        <button class="x" aria-label="Remove task">✕</button>`;
+      const name=d.querySelector(".tn"), start=d.querySelector(".ts"), end=d.querySelector(".te"), status=d.querySelector(".status");
+      name.value=t.name||""; start.value=t.start; end.value=t.end; status.value=t.status;
+      name.addEventListener("input",()=>{ t.name=name.value; save(); });
+      [start,end].forEach(input=>input.addEventListener("input",()=>{
+        t[input===start?"start":"end"]=input.value;
+        delete t.legacyMins;
+        update(); save();
+      }));
+      status.addEventListener("change",()=>{ t.status=status.value; save(); });
+      d.querySelector(".x").onclick=()=>{ r.tasks.splice(j,1); render(); save(); };
+      tl.appendChild(d);
+    });
+    (restDay?[]:r.breaks).forEach((b,j)=>{
+      const d=document.createElement("div"); d.className="break-row";
+      d.innerHTML=`<span class="break-name">Break</span>
+        <input type="time" aria-label="Break start time">
+        <input type="time" aria-label="Break end time">
+        <span class="task-total" aria-label="Break total"></span>
+        <span></span>
+        <button class="x" aria-label="Remove break">✕</button>`;
+      const times=d.querySelectorAll('input[type="time"]');
+      times[0].value=b.start||""; times[1].value=b.end||"";
+      times.forEach((input,index)=>input.addEventListener("input",()=>{
+        b[index===0?"start":"end"]=input.value;
+        update(); save();
+      }));
+      d.querySelector(".x").onclick=()=>{ r.breaks.splice(j,1); render(); save(); };
+      breaks.appendChild(d);
+    });
+    const addTask=td.querySelector(".addT");
+    if(addTask) addTask.onclick=()=>{ r.tasks.push({name:"",start:"",end:"",status:"Not started"}); render(); save(); };
+    const copyReport=td.querySelector(".copyReport");
+    if(copyReport) copyReport.onclick=async event=>{
+      const status=td.querySelector(".copyStatus");
+      const report=buildDailyReport(r);
+      try{
+        await copyReportToClipboard(report);
+        status.textContent="Report copied";
+      }catch(error){
+        status.textContent="Could not copy report. Please select and copy manually.";
+        console.error("Could not copy daily work report",error);
+      }
+    };
+    const sendTeams=td.querySelector(".sendTeams");
+    if(sendTeams) sendTeams.onclick=async()=>{
+      const status=td.querySelector(".copyStatus");
+      const report=buildDailyReport(r);
+      window.open("https://teams.live.com","_blank","noopener,noreferrer");
+      try{
+        await copyReportToClipboard(report);
+        status.textContent="Report copied. Choose a person in Teams and paste it to send.";
+      }catch(error){
+        status.textContent="Teams opened, but the report could not be copied. Use Copy Report instead.";
+        console.error("Could not copy daily work report for Teams",error);
+      }
+    };
+    const addBreak=td.querySelector(".addBreak");
+    if(addBreak) addBreak.onclick=()=>{ r.breaks.push({start:"",end:""}); render(); save(); };
+    const setTaskNow=td.querySelector(".setTaskNow");
+    if(setTaskNow) setTaskNow.onclick=()=>{
+      let entry, isBreak=false;
+      for(let j=r.breaks.length-1;j>=0;j--){
+        if(!r.breaks[j].start||!r.breaks[j].end){ entry=r.breaks[j]; isBreak=true; break; }
+      }
+      for(let j=r.tasks.length-1;j>=0;j--){
+        if(!entry&&(!r.tasks[j].start||!r.tasks[j].end)){ entry=r.tasks[j]; break; }
+      }
+      if(!entry) return;
+      if(!entry.start){
+        entry.start=hhmm();
+        if(!isBreak) entry.status="In progress";
+        delete entry.legacyMins;
+      }else if(!entry.end){
+        entry.end=hhmm();
+        delete entry.legacyMins;
+      }
+      render(); save();
+    };
+    dt.appendChild(td); tb.appendChild(dt);
+  });
+  update();
+}
+
+function update(){
+  const req=requiredMinutes;
+  let total=0, days=0;
+  const kids=$("rows").children;
+  rows.forEach((r,i)=>{
+    const tr=kids[i*2], dt=kids[i*2+1];
+    const w=worked(r);
+    const workCell=tr.querySelector(".w"), varianceCell=tr.querySelector(".v");
+    if(workCell) workCell.textContent=w===null?"–":fmt(w);
+    if(varianceCell){
+      if(w===null){ varianceCell.textContent="–"; varianceCell.className="num v"; }
+      else { const d=w-req; varianceCell.textContent=(d>0?"+":"")+fmt(d); varianceCell.className="num v "+(d>=0?"pos":"neg"); total+=w; days++; }
+    }
+
+    const tg=tr.querySelector(".tg");
+    tg.className="tg"+(r.open?" open":"");
+    tg.setAttribute("aria-expanded", r.open);
+    tg.innerHTML=(r.open?"−":"+")+`<span class="cnt">${String(r.tasks.length).padStart(2,"0")}</span>`;
+    const detailContent=dt.querySelector(".detail-content");
+    const wasOpen=detailContent.classList.contains("open");
+    if(r.open&&!wasOpen){
+      detailContent.inert=false;
+      detailContent.classList.add("open");
+      detailContent.style.height=detailContent.scrollHeight+"px";
+      detailContent.ontransitionend=event=>{
+        if(event.propertyName==="height"&&detailContent.classList.contains("open"))
+          detailContent.style.height="auto";
+      };
+    }else if(!r.open&&wasOpen){
+      detailContent.ontransitionend=null;
+      detailContent.style.height=detailContent.getBoundingClientRect().height+"px";
+      detailContent.getBoundingClientRect();
+      detailContent.classList.remove("open");
+      detailContent.style.height="0px";
+    }
+    detailContent.setAttribute("aria-hidden",String(!r.open));
+    detailContent.inert=!r.open;
+    const breakInput=tr.querySelector('input[aria-label="Break minutes"]');
+    if(breakInput){
+      const autoBreak=loggedBreakMins(r);
+      breakInput.value=autoBreak??r.brk;
+      breakInput.readOnly=autoBreak!==null;
+      breakInput.title=autoBreak!==null?"Automatically calculated from logged breaks":"Manual break";
+    }
+
+    const tt=r.tasks.reduce((s,t)=>s+(taskMins(t)||0),0);
+    let msg=r.tasks.length ? "Tasks total: "+fmt(tt) : "No tasks added yet.";
+    r.tasks.forEach((t,j)=>{ dt.querySelectorAll(".task-total")[j].textContent=taskMins(t)===null?"–":fmt(taskMins(t)); });
+    const breakRows=dt.querySelectorAll(".break-row");
+    r.breaks.forEach((b,j)=>{
+      const duration=taskMins(b);
+      breakRows[j].querySelector(".task-total").textContent=duration===null?"–":fmt(duration);
+    });
+    if(r.breaks.length){
+      const breakTotal=r.breaks.reduce((sum,b)=>sum+(taskMins(b)||0),0);
+      msg+=(r.tasks.length?" · ":"")+"Breaks: "+fmt(breakTotal);
+    }
+    if(r.tasks.length && w!==null){
+      const left=w-tt;
+      msg+=left>=0 ? " · "+fmt(left)+" not logged" : " · "+fmt(-left)+" more than worked";
+    }
+    const taskSummary=dt.querySelector(".tsum");
+    if(taskSummary) taskSummary.textContent=msg;
+  });
+  const diff=total-req*days;
+  $("tWork").textContent=fmt(total);
+  $("tReq").textContent=fmt(req*days);
+  $("tDays").textContent=days;
+  $("dLabel").textContent = diff>=0 ? "Overtime" : "Short by";
+  $("tDiff").textContent=fmt(Math.abs(diff));
+  $("tDiff").className = diff>=0 ? "pos" : "neg";
+}
+
+function reportDate(value){
+  if(!value) return "Not set";
+  const [year,month,day]=value.split("-").map(Number);
+  return new Date(year,month-1,day).toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"});
+}
+function reportTime(value){
+  const total=mins(value);
+  if(total===null) return "Not set";
+  const hour=Math.floor(total/60), minute=total%60;
+  return `${hour%12||12}:${String(minute).padStart(2,"0")} ${hour<12?"AM":"PM"}`;
+}
+function buildDailyReport(r){
+  const taskTotal=r.tasks.reduce((sum,t)=>sum+(taskMins(t)||0),0);
+  const breakTotal=loggedBreakMins(r)??(Number(r.brk)||0);
+  const lines=[
+    "Daily Work Report",
+    "",
+    `Date: ${reportDate(r.date)}`,
+    `Sign in: ${reportTime(r.in)}`,
+    "",
+    "Work Details:",
+    ""
+  ];
+  if(r.tasks.length){
+    const groups=[];
+    r.tasks.forEach(t=>{
+      const name=t.name.trim();
+      const key=name.toLocaleLowerCase();
+      let group=name?groups.find(item=>item.key===key):null;
+      if(!group){
+        group={key,name:name||"Untitled task",sessions:[],status:t.status||"Not started"};
+        groups.push(group);
+      }
+      group.sessions.push(t);
+      group.status=t.status||"Not started";
+    });
+    groups.forEach((group,index)=>{
+      if(index) lines.push("");
+      const durations=group.sessions.map(taskMins).filter(duration=>duration!==null);
+      const total=durations.length?durations.reduce((sum,duration)=>sum+duration,0):null;
+      lines.push(`${group.name}${total===null?"":` — ${fmt(total)}`}`);
+      group.sessions.forEach(t=>{
+        const duration=taskMins(t);
+        lines.push(
+          `Time: ${reportTime(t.start)} - ${reportTime(t.end)}`,
+          `Duration: ${duration===null?"Not recorded":fmt(duration)}`
+        );
+      });
+      lines.push(`Status: ${group.status}`);
+    });
+  }else{
+    lines.push("No tasks logged.");
+  }
+  lines.push("", "Break Time:");
+  if(r.breaks.length){
+    r.breaks.forEach(b=>{
+      const duration=taskMins(b);
+      lines.push(
+        `Time: ${reportTime(b.start)} - ${reportTime(b.end)}`,
+        `Duration: ${duration===null?"Not recorded":fmt(duration)}`
+      );
+    });
+  }else{
+    lines.push("No break times logged.");
+  }
+  lines.push(
+    "",
+    "Summary",
+    `Arrival Time: ${reportTime(r.in)}`,
+    `Total Break Time: ${fmt(breakTotal)}`,
+    `Leaving Time: ${reportTime(r.out)}`,
+    `Total Productive Hours: ${fmt(taskTotal)}`
+  );
+  return lines.join("\n");
+}
+function copyTextFallback(text){
+  const field=document.createElement("textarea");
+  field.value=text;
+  field.setAttribute("readonly","");
+  field.style.position="fixed";
+  field.style.opacity="0";
+  document.body.appendChild(field);
+  field.select();
+  const copied=document.execCommand("copy");
+  field.remove();
+  if(!copied) throw new Error("Clipboard copy command was rejected");
+}
+async function copyReportToClipboard(report){
+  if(navigator.clipboard&&window.isSecureContext){
+    try{
+      await navigator.clipboard.writeText(report);
+      return;
+    }catch(error){
+      try{
+        copyTextFallback(report);
+        return;
+      }catch(fallbackError){
+        throw new AggregateError([error,fallbackError],"Clipboard copy failed");
+      }
+    }
+  }
+  copyTextFallback(report);
+}
+
+function addDay(dayType="workday"){
+  rows.push(newRow(dayType));
+  render();
+  save();
+}
+$("add").onclick=()=>addDay();
+$("addOffDay").onclick=()=>addDay("offday");
+$("addHoliday").onclick=()=>addDay("holiday");
+$("now").onclick=()=>{
+  const last=rows[rows.length-1];
+  if(!last.in) last.in=hhmm(); else last.out=hhmm();
+  render(); save();
+};
+function closeClearDialog(){
+  $("clearDialog").close();
+  $("clearConfirm").value="";
+  $("clearBrowser").disabled=true;
+  $("clearEverywhere").disabled=true;
+}
+function clearEntries(syncToSheets){
+  clearTimeout(sheetSaveTimer);
+  sheetSyncPending=false;
+  sheetSyncPendingPayload=null;
+  rows=[newRow()];
+  render();
+  save(false);
+  if(syncToSheets&&localStorage.getItem(SHEET_URL_KEY))
+    syncToSheet({rows:[]});
+  if(!syncToSheets&&localStorage.getItem(SHEET_URL_KEY))
+    $("sheetStatus").textContent="Browser entries cleared. Google Sheets data was not changed.";
+}
+$("clear").onclick=()=>{
+  $("clearConfirm").value="";
+  $("clearBrowser").disabled=true;
+  $("clearEverywhere").disabled=true;
+  $("clearDialog").showModal();
+  $("clearConfirm").focus();
+};
+$("clearConfirm").addEventListener("input",()=>{
+  const confirmed=$("clearConfirm").value==="CLEAR";
+  $("clearBrowser").disabled=!confirmed;
+  $("clearEverywhere").disabled=!confirmed;
+});
+$("cancelClear").onclick=closeClearDialog;
+$("clearBrowser").onclick=()=>{
+  if($("clearConfirm").value!=="CLEAR") return;
+  clearEntries(false);
+  closeClearDialog();
+};
+$("clearEverywhere").onclick=()=>{
+  if($("clearConfirm").value!=="CLEAR") return;
+  clearEntries(true);
+  closeClearDialog();
+};
+$("req").addEventListener("input",()=>{
+  const parsed=parseRequiredMinutes($("req").value);
+  $("reqError").hidden=parsed!==null;
+  $("req").setAttribute("aria-invalid",parsed===null);
+  if(parsed!==null){ requiredMinutes=parsed; update(); save(); }
+});
+$("req").addEventListener("change",()=>{
+  const parsed=parseRequiredMinutes($("req").value);
+  requiredMinutes=parsed??requiredMinutes;
+  $("req").value=formatRequiredMinutes(requiredMinutes);
+  $("reqError").hidden=true;
+  $("req").setAttribute("aria-invalid","false");
+  update(); save();
+});
+$("brk").addEventListener("input",save);
+$("saveSheetUrl").onclick=()=>{
+  const url=$("sheetUrl").value.trim();
+  if(!validSheetUrl(url)){
+    $("sheetStatus").textContent="Enter a deployed Apps Script URL ending in /exec.";
+    $("sheetUrl").focus();
+    return;
+  }
+  localStorage.setItem(SHEET_URL_KEY,url);
+  $("sheetStatus").textContent="Connected. Sending current entries to Google Sheets…";
+  syncToSheet();
+};
+$("disconnectSheet").onclick=()=>{
+  clearTimeout(sheetSaveTimer);
+  localStorage.removeItem(SHEET_URL_KEY);
+  $("sheetUrl").value="";
+  $("sheetStatus").textContent="Disconnected. Your entries are still saved in this browser.";
+};
+load(); render();
+</script>
+</body>
+</html>
