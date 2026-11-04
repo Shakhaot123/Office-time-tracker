@@ -101,6 +101,7 @@
   .sheet-controls label{flex:1;min-width:260px}
   .sheet-controls input{width:100%}
   .sheet-status{font-size:.85rem;color:var(--mute);margin:8px 0 0}
+  .sheet-controls [hidden]{display:none}
   dialog{width:min(440px,calc(100% - 32px));padding:22px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 16px 48px #0004}
   dialog::backdrop{background:#0008}
   dialog h2{margin:0 0 8px;font-size:1.25rem}
@@ -162,7 +163,7 @@
   <details class="sheet-setup">
     <summary>Google Sheets auto-save</summary>
     <div class="sheet-controls">
-      <label>Apps Script Web App URL
+      <label id="sheetUrlField">Apps Script Web App URL
         <input id="sheetUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="url">
       </label>
       <button class="pri" id="saveSheetUrl">Connect / Save URL</button>
@@ -171,6 +172,14 @@
     <p id="sheetStatus" class="sheet-status" aria-live="polite">Not connected. Your entries are saved in this browser only.</p>
     <p class="note">After connecting, changes are sent to a dedicated “Office Time Data” tab. The web app URL is public; anyone who has it may overwrite that tab. Keep the URL private and use a dedicated spreadsheet.</p>
   </details>
+  <dialog id="disconnectDialog" aria-labelledby="disconnectDialogTitle" aria-describedby="disconnectDialogDescription">
+    <h2 id="disconnectDialogTitle">Disconnect Google Sheets?</h2>
+    <p id="disconnectDialogDescription">New changes will no longer be sent to Google Sheets. Your entries will remain saved in this browser.</p>
+    <div class="clear-actions">
+      <button id="cancelDisconnect">Cancel</button>
+      <button class="pri" id="confirmDisconnect">Disconnect</button>
+    </div>
+  </dialog>
 </main>
 
 <script>
@@ -322,7 +331,14 @@ function load(){
   });
   if(!rows.length) rows.push(newRow());
   $("sheetUrl").value=localStorage.getItem(SHEET_URL_KEY)||"";
+  updateSheetConnectionUI();
   if($("sheetUrl").value) $("sheetStatus").textContent="Connected. Changes will be sent automatically.";
+}
+
+function updateSheetConnectionUI(){
+  const connected=!!localStorage.getItem(SHEET_URL_KEY);
+  $("sheetUrlField").hidden=connected;
+  $("saveSheetUrl").hidden=connected;
 }
 
 function render(){
@@ -724,14 +740,22 @@ $("saveSheetUrl").onclick=()=>{
     return;
   }
   localStorage.setItem(SHEET_URL_KEY,url);
+  updateSheetConnectionUI();
   $("sheetStatus").textContent="Connected. Sending current entries to Google Sheets…";
   syncToSheet();
 };
 $("disconnectSheet").onclick=()=>{
+  if(!localStorage.getItem(SHEET_URL_KEY)) return;
+  $("disconnectDialog").showModal();
+};
+$("cancelDisconnect").onclick=()=>$("disconnectDialog").close();
+$("confirmDisconnect").onclick=()=>{
   clearTimeout(sheetSaveTimer);
   localStorage.removeItem(SHEET_URL_KEY);
   $("sheetUrl").value="";
+  updateSheetConnectionUI();
   $("sheetStatus").textContent="Disconnected. Your entries are still saved in this browser.";
+  $("disconnectDialog").close();
 };
 load(); render();
 </script>
