@@ -324,7 +324,7 @@ function load(){
       if(t.start===undefined&&t.end===undefined&&(t.h!==undefined||t.m!==undefined)&&(t.h!==""||t.m!==""))
         t.legacyMins=(Number(t.h)||0)*60+(Number(t.m)||0);
       t.start=t.start||""; t.end=t.end||"";
-      if(!["Not started","In progress","Completed"].includes(t.status)) t.status="Not started";
+      if(!["Not started","In progress","Hold","Completed"].includes(t.status)) t.status="Not started";
       return t;
     });
     r.open=!!r.open;
@@ -401,7 +401,7 @@ function render(){
         <input class="ts" type="time" aria-label="Task start time">
         <input class="te" type="time" aria-label="Task end time">
         <span class="task-total" aria-label="Task total"></span>
-        <select class="status" aria-label="Task status"><option>Not started</option><option>In progress</option><option>Completed</option></select>
+        <select class="status" aria-label="Task status"><option>Not started</option><option>In progress</option><option>Hold</option><option>Completed</option></select>
         <button class="x" aria-label="Remove task">✕</button>`;
       const name=d.querySelector(".tn"), start=d.querySelector(".ts"), end=d.querySelector(".te"), status=d.querySelector(".status");
       name.value=t.name||""; start.value=t.start; end.value=t.end; status.value=t.status;
