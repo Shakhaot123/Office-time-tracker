@@ -120,7 +120,7 @@
     <div class="box main"><small>Total worked</small><b id="tWork">0h 00m</b></div>
     <div class="box"><small>Required</small><b id="tReq">0h 00m</b></div>
     <div class="box"><small id="dLabel">Overtime / short</small><b id="tDiff">0h 00m</b></div>
-    <div class="box"><small>Days counted</small><b id="tDays">0</b></div>
+    <div class="box"><small>Working Days</small><b id="tDays">0</b></div>
   </section>
 
   <div class="set">
@@ -554,7 +554,7 @@ function update(){
   $("tWork").textContent=fmt(total);
   $("tReq").textContent=fmt(req*days);
   $("tDays").textContent=days;
-  $("dLabel").textContent = diff>=0 ? "Overtime" : "Short by";
+  $("dLabel").textContent = diff>=0 ? "Overtime" : "Loss time";
   $("tDiff").textContent=fmt(Math.abs(diff));
   $("tDiff").className = diff>=0 ? "pos" : "neg";
 }
