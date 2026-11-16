@@ -144,6 +144,69 @@
         padding: 8px 10px;
         min-width: 0;
       }
+      .picker-field {
+        position: relative;
+        display: block;
+        width: 100%;
+        min-width: 0;
+      }
+      .picker-field > input {
+        width: 100%;
+        padding-right: 42px;
+      }
+      .picker-field > input[type="date"]::-webkit-calendar-picker-indicator,
+      .picker-field > input[type="time"]::-webkit-calendar-picker-indicator {
+        display: none;
+      }
+      .picker-trigger {
+        position: absolute;
+        top: 50%;
+        right: 4px;
+        z-index: 1;
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        padding: 6px;
+        border: 0;
+        background: var(--card);
+        color: var(--mute);
+        box-shadow: none;
+        transform: translateY(-50%);
+        transition: color 0.16s ease, background-color 0.16s ease;
+      }
+      .picker-trigger:hover {
+        background: var(--sub);
+        color: var(--ink);
+        box-shadow: none;
+        transform: translateY(-50%);
+      }
+      .picker-trigger:active {
+        box-shadow: none;
+        transform: translateY(-50%);
+      }
+      @supports (-moz-appearance: none) {
+        .picker-trigger::before {
+          position: absolute;
+          top: 0;
+          right: 100%;
+          width: 28px;
+          height: 100%;
+          background: var(--card);
+          content: "";
+          pointer-events: none;
+        }
+      }
+      .picker-trigger svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+      }
       input[type="number"] {
         appearance: textfield;
         text-align: center;
@@ -339,12 +402,12 @@
         margin-bottom: 8px;
       }
       .task .tn,
-      .task input[type="time"],
       .task select {
         width: 100%;
         min-width: 0;
       }
-      .break-row input[type="time"] {
+      .task .picker-field,
+      .break-row .picker-field {
         width: 100%;
         min-width: 0;
       }
@@ -377,7 +440,10 @@
         overflow-x: auto;
       }
       .task-list input[type="time"] {
-        padding: 8px 6px;
+        padding-left: 6px;
+      }
+      .task-list .picker-field > input[type="time"] {
+        padding-right: 42px;
       }
       .tbar {
         display: flex;
@@ -404,7 +470,7 @@
         align-items: center;
         gap: 8px;
       }
-      .date-cell input {
+      .date-cell .picker-field {
         flex: 1;
         min-width: 145px;
       }
@@ -781,6 +847,8 @@
       const SHEET_URL_KEY = "office-time-sheet-url-v1";
       const SHEET_NAME_KEY = "office-time-sheet-name-v1";
       const SHEET_OWNER_ID_KEY = "office-time-sheet-owner-id-v1";
+      const SHEET_CLAIM_VERSION_KEY = "office-time-sheet-claim-version-v1";
+      const SHEET_CLAIM_VERSION = "case-insensitive-names-v2";
       const DEFAULT_SHEET_NAME = "Office Time Data";
       let pendingSheetUrl = "";
       let rows = [];
@@ -932,6 +1000,13 @@
           localStorage.getItem(SHEET_OWNER_ID_KEY) || "",
         );
       }
+      function sheetConnectionReady() {
+        return (
+          !!localStorage.getItem(SHEET_URL_KEY) &&
+          localStorage.getItem(SHEET_CLAIM_VERSION_KEY) === SHEET_CLAIM_VERSION &&
+          hasSheetOwnerId()
+        );
+      }
       function sheetOwnerId() {
         const saved = localStorage.getItem(SHEET_OWNER_ID_KEY) || "";
         if (/^[a-f0-9]{32}$/i.test(saved)) return saved;
@@ -977,7 +1052,7 @@
       }
       function scheduleSheetSave() {
         clearTimeout(sheetSaveTimer);
-        if (!localStorage.getItem(SHEET_URL_KEY)) return;
+        if (!sheetConnectionReady()) return;
         $("sheetStatus").textContent =
           "Changes saved in this browser. Sending to Google Sheets…";
         sheetSaveTimer = setTimeout(syncToSheet, 900);
@@ -988,8 +1063,8 @@
           sheetSyncPendingPayload = payload || null;
           return false;
         }
+        if (!sheetConnectionReady()) return false;
         const url = localStorage.getItem(SHEET_URL_KEY);
-        if (!url) return false;
         sheetSyncing = true;
         $("sheetStatus").textContent =
           "Sending current entries to Google Sheets…";
@@ -1076,13 +1151,11 @@
         });
         if (!rows.length) rows.push(newRow());
         const savedUrl = localStorage.getItem(SHEET_URL_KEY) || "";
-        if (savedUrl && !hasSheetOwnerId()) {
-          localStorage.removeItem(SHEET_URL_KEY);
-          $("sheetUrl").value = savedUrl;
+        $("sheetUrl").value = savedUrl;
+        if (savedUrl && !sheetConnectionReady()) {
           $("sheetStatus").textContent =
-            "Reconnect to reserve your tab and resume automatic saves.";
+            "Reconnect to verify your tab name and resume automatic saves.";
         } else {
-          $("sheetUrl").value = savedUrl;
           if (savedUrl)
             $("sheetStatus").textContent =
               "Connected. Changes will be sent automatically.";
@@ -1091,11 +1164,33 @@
       }
 
       function updateSheetConnectionUI() {
-        const connected = !!localStorage.getItem(SHEET_URL_KEY);
+        const connected = sheetConnectionReady();
         $("sheetUrlField").hidden = connected;
         $("connectSheet").hidden = connected;
         $("disconnectSheet").hidden = !connected;
         $("howTo").hidden = connected;
+      }
+
+      function escapeAttribute(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => {
+          const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          };
+          return entities[character];
+        });
+      }
+
+      function pickerField(type, label, value, className = "") {
+        const icon =
+          type === "date"
+            ? `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M8 3.5v4M16 3.5v4M3.5 9.5h17"></path></svg>`
+            : `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7v5l3 2"></path></svg>`;
+        const inputClass = className ? ` class="${className}"` : "";
+        return `<span class="picker-field"><input${inputClass} type="${type}" value="${escapeAttribute(value)}" aria-label="${label}"><button type="button" class="picker-trigger" aria-label="Open ${type === "date" ? "calendar" : "time picker"}">${icon}</button></span>`;
       }
 
       function render() {
@@ -1107,12 +1202,12 @@
           const restDay = r.dayType === "offday" || r.dayType === "holiday";
           const dayLabel = r.dayType === "offday" ? "Off day" : "Holiday";
           tr.innerHTML = restDay
-            ? `<td><input type="date" value="${r.date}" aria-label="Date"></td>
+            ? `<td>${pickerField("date", "Date", r.date)}</td>
         <td colspan="5"><span class="day-type-label ${r.dayType}">${dayLabel}</span></td>
         <td class="act rest-day-actions"><div class="actions"><button class="tg" aria-expanded="${r.open}" aria-label="Show or hide tasks for this day"></button><button class="x" aria-label="Remove day">✕</button></div></td>`
-            : `<td class="date-cell"><input type="date" value="${r.date}" aria-label="Date"></td>
-        <td><input type="time" value="${r.in}" aria-label="In time"></td>
-        <td><input type="time" value="${r.out}" aria-label="Out time"></td>
+            : `<td class="date-cell">${pickerField("date", "Date", r.date)}</td>
+        <td>${pickerField("time", "In time", r.in)}</td>
+        <td>${pickerField("time", "Out time", r.out)}</td>
         <td><input type="number" min="0" step="5" value="${r.brk}" aria-label="Break minutes" style="width:90px"></td>
         <td class="num w"></td><td class="num v"></td>
         <td class="act"><div class="actions"><button class="tg" aria-expanded="${r.open}" aria-label="Show or hide tasks for this day"></button><button class="x" aria-label="Remove day">✕</button></div></td>`;
@@ -1181,8 +1276,8 @@
             const d = document.createElement("div");
             d.className = "task";
             d.innerHTML = `<input class="tn" type="text" placeholder="What did you work on?" aria-label="Task name">
-        <input class="ts" type="time" aria-label="Task start time">
-        <input class="te" type="time" aria-label="Task end time">
+        ${pickerField("time", "Task start time", t.start, "ts")}
+        ${pickerField("time", "Task end time", t.end, "te")}
         <span class="task-total" aria-label="Task total"></span>
         <select class="status" aria-label="Task status"><option>Not started</option><option>In progress</option><option>Hold</option><option>Completed</option></select>
         <button class="x" aria-label="Remove task">✕</button>`;
@@ -1221,8 +1316,8 @@
             const d = document.createElement("div");
             d.className = "break-row";
             d.innerHTML = `<span class="break-name">Break</span>
-        <input type="time" aria-label="Break start time">
-        <input type="time" aria-label="Break end time">
+        ${pickerField("time", "Break start time", b.start || "")}
+        ${pickerField("time", "Break end time", b.end || "")}
         <span class="task-total" aria-label="Break total"></span>
         <span></span>
         <button class="x" aria-label="Remove break">✕</button>`;
@@ -1754,6 +1849,16 @@
       $("add").onclick = () => addDay();
       $("addOffDay").onclick = () => addDay("offday");
       $("addHoliday").onclick = () => addDay("holiday");
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest(".picker-trigger");
+        if (!trigger) return;
+        const input = trigger.parentElement.querySelector("input");
+        if (typeof input.showPicker === "function") input.showPicker();
+        else {
+          input.focus();
+          input.click();
+        }
+      });
       $("now").onclick = () => {
         const last = rows[rows.length - 1];
         if (!last.in) last.in = hhmm();
@@ -1774,9 +1879,9 @@
         rows = [newRow()];
         render();
         save(false);
-        if (syncToSheets && localStorage.getItem(SHEET_URL_KEY))
+        if (syncToSheets && sheetConnectionReady())
           syncToSheet({ rows: [] });
-        if (!syncToSheets && localStorage.getItem(SHEET_URL_KEY))
+        if (!syncToSheets && sheetConnectionReady())
           $("sheetStatus").textContent =
             "Browser entries cleared. Google Sheets data was not changed.";
       }
@@ -1838,7 +1943,7 @@
         $("sheetName").focus();
       };
       $("disconnectSheet").onclick = () => {
-        if (!localStorage.getItem(SHEET_URL_KEY)) return;
+        if (!sheetConnectionReady()) return;
         $("disconnectDialog").showModal();
       };
       $("cancelSheetConnect").onclick = () => {
@@ -1858,7 +1963,9 @@
         const button = $("confirmSheetConnect");
         button.disabled = true;
         $("sheetNameError").hidden = true;
-        $("sheetStatus").textContent = "Checking whether this tab name is available…";
+        $("sheetStatus").textContent =
+          "Checking whether this tab name is available…";
+        let claimedSheetName = name;
         try {
           const ownerId = sheetOwnerId();
           const claim = await claimSheetName(pendingSheetUrl, name, ownerId);
@@ -1866,11 +1973,14 @@
             $("sheetNameError").textContent =
               claim && claim.code === "NAME_TAKEN"
                 ? "That tab name is already claimed. Choose a different name."
+                : claim && claim.code === "CASE_CONFLICT"
+                  ? "Tabs with different letter casing already exist. Use an exact tab name."
                 : "Could not verify this tab name. Check the URL and try again.";
             $("sheetNameError").hidden = false;
             $("sheetName").focus();
             return;
           }
+          claimedSheetName = claim.sheetName || name;
         } catch (error) {
           $("sheetNameError").textContent =
             "Could not verify this tab name. Check the URL and your internet connection.";
@@ -1880,8 +1990,9 @@
         } finally {
           button.disabled = false;
         }
-        localStorage.setItem(SHEET_NAME_KEY, name);
+        localStorage.setItem(SHEET_NAME_KEY, claimedSheetName);
         localStorage.setItem(SHEET_URL_KEY, pendingSheetUrl);
+        localStorage.setItem(SHEET_CLAIM_VERSION_KEY, SHEET_CLAIM_VERSION);
         pendingSheetUrl = "";
         updateSheetConnectionUI();
         $("sheetStatus").textContent =
