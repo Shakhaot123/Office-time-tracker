@@ -145,6 +145,9 @@
     <button id="addOffDay">Off day</button>
     <button id="addHoliday">Holiday</button>
     <button id="now">Set current time as In / Out</button>
+    <button id="export">Export</button>
+    <button id="import">Import</button>
+    <input id="importFile" type="file" accept=".json,application/json" hidden>
     <button id="clear">Clear all</button>
   </div>
   <dialog id="clearDialog" aria-labelledby="clearDialogTitle" aria-describedby="clearDialogDescription">
@@ -668,6 +671,94 @@ function addDay(dayType="workday"){
   render();
   save();
 }
+$("export").onclick=()=>{
+  const data={rows, req:formatRequiredMinutes(requiredMinutes), brk:$("brk").value};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=`office-time-${today()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+$("import").onclick=()=>$("importFile").click();
+$("importFile").addEventListener("change",async()=>{
+  const file=$("importFile").files[0];
+  if(!file) return;
+  try{
+    const data=JSON.parse(await file.text());
+    if(!data||typeof data!=="object"||!Array.isArray(data.rows))
+      throw new Error("The file must contain an array of rows.");
+    const importedRows=data.rows.map((row,index)=>{
+      if(!row||typeof row!=="object"||Array.isArray(row))
+        throw new Error(`Day ${index+1} is invalid.`);
+      const date=typeof row.date==="string"?row.date:"";
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date))
+        throw new Error(`Day ${index+1} has an invalid date.`);
+      const parsedDate=new Date(Number(date.slice(0,4)),Number(date.slice(5,7))-1,Number(date.slice(8,10)));
+      if(parsedDate.getFullYear()!==Number(date.slice(0,4))||parsedDate.getMonth()+1!==Number(date.slice(5,7))||parsedDate.getDate()!==Number(date.slice(8,10)))
+        throw new Error(`Day ${index+1} has an invalid date.`);
+      const validTime=value=>typeof value==="string"&&(!value||/^([01]\d|2[0-3]):[0-5]\d$/.test(value));
+      if(!validTime(row.in||"")||!validTime(row.out||""))
+        throw new Error(`Day ${index+1} has an invalid time.`);
+      const breakMinutes=Number(row.brk??0);
+      if(!Number.isFinite(breakMinutes)||breakMinutes<0)
+        throw new Error(`Day ${index+1} has invalid break minutes.`);
+      if(row.tasks!==undefined&&!Array.isArray(row.tasks)||row.breaks!==undefined&&!Array.isArray(row.breaks))
+        throw new Error(`Day ${index+1} has invalid tasks or breaks.`);
+      const tasks=(row.tasks||[]).map(task=>{
+        if(!task||typeof task!=="object"||Array.isArray(task)||(task.name!==undefined&&typeof task.name!=="string")||!validTime(task.start||"")||!validTime(task.end||""))
+          throw new Error(`Day ${index+1} contains an invalid task.`);
+        const legacyMins=Number(task.legacyMins);
+        if(task.legacyMins!==undefined&&(!Number.isFinite(legacyMins)||legacyMins<0))
+          throw new Error(`Day ${index+1} contains an invalid task duration.`);
+        if(task.start===undefined&&task.end===undefined&&(task.h!==undefined||task.m!==undefined)&&(task.h!==""||task.m!=="")){
+          const hours=task.h===undefined||task.h===""?0:Number(task.h);
+          const minutes=task.m===undefined||task.m===""?0:Number(task.m);
+          if(!Number.isFinite(hours)||!Number.isFinite(minutes)||hours<0||minutes<0)
+            throw new Error(`Day ${index+1} contains an invalid task duration.`);
+          task.legacyMins=hours*60+minutes;
+        }
+        return {...task,name:task.name||"",start:task.start||"",end:task.end||"",status:["Not started","In progress","Hold","Completed"].includes(task.status)?task.status:"Not started"};
+      });
+      const breaks=(row.breaks||[]).map(item=>{
+        if(!item||typeof item!=="object"||Array.isArray(item)||!validTime(item.start||"")||!validTime(item.end||""))
+          throw new Error(`Day ${index+1} contains an invalid break.`);
+        if(item.legacyMins!==undefined&&!Number.isFinite(Number(item.legacyMins)))
+          throw new Error(`Day ${index+1} contains an invalid break duration.`);
+        return {...item,start:item.start||"",end:item.end||""};
+      });
+      if(row.note!==undefined&&typeof row.note!=="string")
+        throw new Error(`Day ${index+1} has an invalid note.`);
+      return {
+        ...row,date,dayType:["workday","offday","holiday"].includes(row.dayType)?row.dayType:"workday",
+        in:row.in||"",out:row.out||"",brk:breakMinutes,tasks,breaks,note:row.note||"",open:!!row.open
+      };
+    });
+    const savedRequired=parseRequiredMinutes(String(data.req??""));
+    const legacyRequired=Number(data.req);
+    const importedRequired=savedRequired??(Number.isFinite(legacyRequired)&&legacyRequired>=0&&legacyRequired<=24?legacyRequired*60:null);
+    if(importedRequired===null)
+      throw new Error("The file has an invalid required-hours setting.");
+    const importedBreak=Number(data.brk??60);
+    if(!Number.isFinite(importedBreak)||importedBreak<0)
+      throw new Error("The file has an invalid default break setting.");
+    if(!window.confirm("Importing this file will replace current browser entries and, if connected, sync them to Google Sheets. Continue?")) return;
+    rows=importedRows.length?importedRows:[newRow()];
+    requiredMinutes=importedRequired;
+    $("req").value=formatRequiredMinutes(requiredMinutes);
+    $("brk").value=importedBreak;
+    render();
+    save();
+  }catch(error){
+    window.alert(`Could not import JSON: ${error.message}`);
+    console.error("Could not import office time data",error);
+  }finally{
+    $("importFile").value="";
+  }
+});
 $("add").onclick=()=>addDay();
 $("addOffDay").onclick=()=>addDay("offday");
 $("addHoliday").onclick=()=>addDay("holiday");
