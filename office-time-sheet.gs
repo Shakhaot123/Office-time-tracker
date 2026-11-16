@@ -14,27 +14,25 @@ const HEADERS = [
 ];
 
 function doGet(e) {
-const parameters = e && e.parameter ? e.parameter : {};
-const callback = String(parameters.callback || "");
-if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) {
-  throw new Error("Invalid callback.");
-}
+  const parameters = e && e.parameter ? e.parameter : {};
+  const callback = String(parameters.callback || "");
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) {
+    throw new Error("Invalid callback.");
+  }
 
-let result;
-try {
-  if (parameters.action !== "claim") throw new Error("Unsupported action.");
-  const sheetName = validatedSheetName(parameters.sheetName);
-  const ownerId = validatedOwnerId(parameters.ownerId);
-  result = claimSheetName(sheetName, ownerId)
-    ? { ok: true }
-    : { ok: false, code: "NAME_TAKEN" };
-} catch (error) {
-  console.error("Could not claim Google Sheets tab", error);
-  result = { ok: false, code: "CLAIM_FAILED" };
-}
+  let result;
+  try {
+    if (parameters.action !== "claim") throw new Error("Unsupported action.");
+    const sheetName = validatedSheetName(parameters.sheetName);
+    const ownerId = validatedOwnerId(parameters.ownerId);
+    result = claimSheetName(sheetName, ownerId);
+  } catch (error) {
+    console.error("Could not claim Google Sheets tab", error);
+    result = { ok: false, code: "CLAIM_FAILED" };
+  }
 
-return ContentService.createTextOutput(`${callback}(${JSON.stringify(result)});`)
-  .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return ContentService.createTextOutput(`${callback}(${JSON.stringify(result)});`)
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
 function doPost(e) {
@@ -121,21 +119,62 @@ function claimSheetName(sheetName, ownerId) {
     const properties = PropertiesService.getScriptProperties();
     const key = sheetOwnerPropertyKey(sheetName);
     const currentOwner = properties.getProperty(key);
-    if (currentOwner && currentOwner !== ownerId) return false;
+    if (currentOwner && currentOwner !== ownerId) {
+      return { ok: false, code: "NAME_TAKEN" };
+    }
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (!spreadsheet) {
+      throw new Error("This script must be bound to the target spreadsheet.");
+    }
+    const normalizedName = normalizedSheetName(sheetName);
+    const matchingSheets = spreadsheet.getSheets().filter(sheet =>
+      normalizedSheetName(sheet.getName()) === normalizedName
+    );
+    const targetSheet =
+      matchingSheets.find(sheet => sheet.getName() === sheetName) ||
+      (matchingSheets.length === 1 ? matchingSheets[0] : null);
+    if (!targetSheet && matchingSheets.length > 1) {
+      return { ok: false, code: "CASE_CONFLICT" };
+    }
+
+    const targetName = targetSheet ? targetSheet.getName() : sheetName;
+    const legacyOwners = [
+      properties.getProperty(legacySheetOwnerPropertyKey(targetName)),
+      targetName === sheetName
+        ? null
+        : properties.getProperty(legacySheetOwnerPropertyKey(sheetName)),
+    ].filter(Boolean);
+    if (legacyOwners.some(owner => owner !== ownerId)) {
+      return { ok: false, code: "NAME_TAKEN" };
+    }
+
     if (!currentOwner) properties.setProperty(key, ownerId);
-    return true;
+    return { ok: true, sheetName: targetName };
   } finally {
     lock.releaseLock();
   }
 }
 
 function sheetOwnerPropertyKey(sheetName) {
+  return SHEET_OWNER_PROPERTY_PREFIX + sheetNameDigest(normalizedSheetName(sheetName));
+}
+
+function legacySheetOwnerPropertyKey(sheetName) {
+  return SHEET_OWNER_PROPERTY_PREFIX + sheetNameDigest(sheetName);
+}
+
+function sheetNameDigest(sheetName) {
   const digest = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     sheetName,
     Utilities.Charset.UTF_8,
   );
-  return SHEET_OWNER_PROPERTY_PREFIX + Utilities.base64EncodeWebSafe(digest);
+  return Utilities.base64EncodeWebSafe(digest);
+}
+
+function normalizedSheetName(sheetName) {
+  return sheetName.normalize("NFC").toLowerCase();
 }
 
 function validatedSheetName(value) {
