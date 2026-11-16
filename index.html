@@ -103,6 +103,10 @@
   .sheet-status{font-size:.85rem;color:var(--mute);margin:8px 0 0}
   .sheet-controls [hidden]{display:none}
   dialog{width:min(440px,calc(100% - 32px));padding:22px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 16px 48px #0004}
+  .sheet-help-dialog{width:min(640px,calc(100% - 32px));max-height:calc(100% - 32px);overflow-y:auto}
+  .sheet-help-dialog ol{padding-left:22px;margin:12px 0}
+  .sheet-help-dialog li{margin-bottom:12px}
+  .sheet-help-dialog li p{margin:4px 0 0}
   dialog::backdrop{background:#0008}
   dialog h2{margin:0 0 8px;font-size:1.25rem}
   dialog p{margin:0 0 14px;color:var(--mute)}
@@ -171,6 +175,7 @@
       </label>
       <button class="pri" id="saveSheetUrl">Connect / Save URL</button>
       <button id="disconnectSheet">Disconnect</button>
+      <button id="howTo">How to</button>
     </div>
     <p id="sheetStatus" class="sheet-status" aria-live="polite">Not connected. Your entries are saved in this browser only.</p>
     <p class="note">After connecting, changes are sent to a dedicated “Office Time Data” tab. The web app URL is public; anyone who has it may overwrite that tab. Keep the URL private and use a dedicated spreadsheet.</p>
@@ -181,6 +186,22 @@
     <div class="clear-actions">
       <button id="cancelDisconnect">Cancel</button>
       <button class="pri" id="confirmDisconnect">Disconnect</button>
+    </div>
+  </dialog>
+  <dialog id="howToDialog" class="sheet-help-dialog" aria-labelledby="howToTitle" aria-describedby="howToDescription">
+    <h2 id="howToTitle">Connect to Google Sheets</h2>
+    <p id="howToDescription">Follow these steps to set up automatic saving:</p>
+    <ol>
+      <li>Create a dedicated <a href="https://sheets.google.com/create" target="_blank" rel="noopener noreferrer">Google spreadsheet</a>.</li>
+      <li>In the spreadsheet, choose <strong>Extensions &gt; Apps Script</strong>. Open the provided <code>office-time-sheet.gs</code> file, copy its contents into the Apps Script editor's <code>Code.gs</code>, then save.</li>
+      <li>Choose <strong>Deploy &gt; New deployment</strong>, select the gear icon, and choose <strong>Web app</strong>.</li>
+      <li>Set <strong>Execute as</strong> to <strong>Me</strong> and <strong>Who has access</strong> to <strong>Anyone</strong>, then select <strong>Deploy</strong>. Follow Google's prompts to authorize the script.</li>
+      <li>Copy the Web app URL ending in <code>/exec</code>. Paste it into the Apps Script Web App URL field here and select <strong>Connect / Save URL</strong>.</li>
+      <li>Check the status message and the spreadsheet's <strong>Office Time Data</strong> tab to confirm it worked.</li>
+    </ol>
+    <p><strong>Keep the Web app URL private.</strong> Anyone who has it may overwrite the connected sheet, so use a dedicated spreadsheet.</p>
+    <div class="clear-actions">
+      <button id="closeHowTo">Close</button>
     </div>
   </dialog>
 </main>
@@ -342,6 +363,8 @@ function updateSheetConnectionUI(){
   const connected=!!localStorage.getItem(SHEET_URL_KEY);
   $("sheetUrlField").hidden=connected;
   $("saveSheetUrl").hidden=connected;
+  $("disconnectSheet").hidden=!connected;
+  $("howTo").hidden=connected;
 }
 
 function render(){
@@ -839,6 +862,8 @@ $("disconnectSheet").onclick=()=>{
   if(!localStorage.getItem(SHEET_URL_KEY)) return;
   $("disconnectDialog").showModal();
 };
+$("howTo").onclick=()=>$("howToDialog").showModal();
+$("closeHowTo").onclick=()=>$("howToDialog").close();
 $("cancelDisconnect").onclick=()=>$("disconnectDialog").close();
 $("confirmDisconnect").onclick=()=>{
   clearTimeout(sheetSaveTimer);
