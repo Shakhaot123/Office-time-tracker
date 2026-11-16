@@ -526,6 +526,10 @@
       .sheet-connect-actions {
         margin-top: 14px;
       }
+      .sheet-name-error {
+        margin-top: 8px;
+        line-height: 1.4;
+      }
       button:disabled {
         cursor: not-allowed;
         opacity: 0.5;
@@ -698,7 +702,12 @@
           >Sheet name
           <input id="sheetName" type="text" maxlength="100" required />
         </label>
-        <p id="sheetNameError" class="field-error" role="alert" hidden>
+        <p
+          id="sheetNameError"
+          class="field-error sheet-name-error"
+          role="alert"
+          hidden
+        >
           Use 1–100 characters. The name cannot contain : \ / ? * [ ].
         </p>
         <p class="note">
