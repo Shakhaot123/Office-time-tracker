@@ -1,5 +1,5 @@
 const SHEET_NAME = "Office Time Data";
-const SHEET_NAME_PROPERTY = "officeTimeSheetName";
+const SHEET_OWNER_PROPERTY_PREFIX = "officeTimeSheetOwner:";
 const HEADERS = [
   "Date",
   "Sign in",
@@ -12,6 +12,30 @@ const HEADERS = [
   "Break Details",
   "Summary"
 ];
+
+function doGet(e) {
+const parameters = e && e.parameter ? e.parameter : {};
+const callback = String(parameters.callback || "");
+if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,80}$/.test(callback)) {
+  throw new Error("Invalid callback.");
+}
+
+let result;
+try {
+  if (parameters.action !== "claim") throw new Error("Unsupported action.");
+  const sheetName = validatedSheetName(parameters.sheetName);
+  const ownerId = validatedOwnerId(parameters.ownerId);
+  result = claimSheetName(sheetName, ownerId)
+    ? { ok: true }
+    : { ok: false, code: "NAME_TAKEN" };
+} catch (error) {
+  console.error("Could not claim Google Sheets tab", error);
+  result = { ok: false, code: "CLAIM_FAILED" };
+}
+
+return ContentService.createTextOutput(`${callback}(${JSON.stringify(result)});`)
+  .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
 
 function doPost(e) {
   if (!e || !e.postData || !e.postData.contents) {
@@ -31,23 +55,14 @@ function doPost(e) {
       throw new Error("This script must be bound to the target spreadsheet.");
     }
 
-    const properties = PropertiesService.getScriptProperties();
-    let sheetName = properties.getProperty(SHEET_NAME_PROPERTY) || SHEET_NAME;
-    if (payload.action === "rename") {
-      const newName = validatedSheetName(payload.sheetName);
-      const currentSheet =
-        spreadsheet.getSheetByName(sheetName) ||
-        spreadsheet.getSheetByName(SHEET_NAME) ||
-        spreadsheet.insertSheet(SHEET_NAME);
-      const existingSheet = spreadsheet.getSheetByName(newName);
-      if (existingSheet && existingSheet.getSheetId() !== currentSheet.getSheetId()) {
-        throw new Error("A sheet with that name already exists.");
-      }
-      currentSheet.setName(newName);
-      properties.setProperty(SHEET_NAME_PROPERTY, newName);
-      sheetName = newName;
-    } else if (payload.action !== undefined && payload.action !== "sync") {
-      throw new Error("Unsupported action.");
+    const sheetName =
+      payload.sheetName === undefined ? SHEET_NAME : validatedSheetName(payload.sheetName);
+    const ownerId = validatedOwnerId(payload.ownerId);
+    const claimedOwner = PropertiesService.getScriptProperties().getProperty(
+      sheetOwnerPropertyKey(sheetName),
+    );
+    if (claimedOwner !== ownerId) {
+      throw new Error("This browser has not claimed this sheet tab.");
     }
 
     const sheet = spreadsheet.getSheetByName(sheetName) || spreadsheet.insertSheet(sheetName);
@@ -99,12 +114,42 @@ function doPost(e) {
   }
 }
 
+function claimSheetName(sheetName, ownerId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const key = sheetOwnerPropertyKey(sheetName);
+    const currentOwner = properties.getProperty(key);
+    if (currentOwner && currentOwner !== ownerId) return false;
+    if (!currentOwner) properties.setProperty(key, ownerId);
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sheetOwnerPropertyKey(sheetName) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    sheetName,
+    Utilities.Charset.UTF_8,
+  );
+  return SHEET_OWNER_PROPERTY_PREFIX + Utilities.base64EncodeWebSafe(digest);
+}
+
 function validatedSheetName(value) {
   const name = typeof value === "string" ? value.trim() : "";
   if (!name || name.length > 100 || /[\\/:?*\[\]]/.test(name)) {
     throw new Error("Invalid sheet name.");
   }
   return name;
+}
+
+function validatedOwnerId(value) {
+  const ownerId = typeof value === "string" ? value : "";
+  if (!/^[a-f0-9]{32}$/i.test(ownerId)) throw new Error("Invalid owner ID.");
+  return ownerId;
 }
 
 function sheetDate(value, timezone) {

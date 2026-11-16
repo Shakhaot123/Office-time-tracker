@@ -663,9 +663,10 @@
           Not connected. Your entries are saved in this browser only.
         </p>
         <p class="note">
-          After connecting, changes are sent to a dedicated “Office Time Data”
-          tab. The web app URL is public; anyone who has it may overwrite that
-          tab. Keep the URL private and use a dedicated spreadsheet.
+          After connecting, changes are sent to the selected tab (default:
+          “Office Time Data”). The web app URL is public; anyone who has it may
+          overwrite that tab. Keep the URL private and use a dedicated
+          spreadsheet.
         </p>
       </details>
       <dialog
@@ -690,7 +691,8 @@
       >
         <h2 id="connectSheetDialogTitle">Save sheet as</h2>
         <p id="connectSheetDialogDescription">
-          Choose a name for the Google Sheets tab, then connect.
+          Choose a unique tab name for your data. An existing tab with that
+          name will be used; otherwise, a new tab will be created.
         </p>
         <label
           >Sheet name
@@ -698,6 +700,10 @@
         </label>
         <p id="sheetNameError" class="field-error" role="alert" hidden>
           Use 1–100 characters. The name cannot contain : \ / ? * [ ].
+        </p>
+        <p class="note">
+          This tab is reserved to this browser. Clearing its site data may
+          remove access to the tab.
         </p>
         <div class="clear-actions sheet-connect-actions">
           <button id="cancelSheetConnect">Cancel</button>
@@ -746,8 +752,8 @@
             <strong>Connect</strong>, then choose the name for the data tab.
           </li>
           <li>
-            Check the status message and the spreadsheet's
-            <strong>Office Time Data</strong> tab to confirm it worked.
+            Check the status message and the spreadsheet tab with the name you
+            chose to confirm it worked.
           </li>
         </ol>
         <p>
@@ -765,6 +771,7 @@
       const KEY = "office-time-v1";
       const SHEET_URL_KEY = "office-time-sheet-url-v1";
       const SHEET_NAME_KEY = "office-time-sheet-name-v1";
+      const SHEET_OWNER_ID_KEY = "office-time-sheet-owner-id-v1";
       const DEFAULT_SHEET_NAME = "Office Time Data";
       let pendingSheetUrl = "";
       let rows = [];
@@ -879,6 +886,8 @@
       }
       function sheetPayload() {
         return {
+          sheetName: savedSheetName(),
+          ownerId: sheetOwnerId(),
           rows: rows.map((r) => ({
             date: r.date,
             dayType: r.dayType || "workday",
@@ -909,6 +918,54 @@
       function savedSheetName() {
         return localStorage.getItem(SHEET_NAME_KEY) || DEFAULT_SHEET_NAME;
       }
+      function hasSheetOwnerId() {
+        return /^[a-f0-9]{32}$/i.test(
+          localStorage.getItem(SHEET_OWNER_ID_KEY) || "",
+        );
+      }
+      function sheetOwnerId() {
+        const saved = localStorage.getItem(SHEET_OWNER_ID_KEY) || "";
+        if (/^[a-f0-9]{32}$/i.test(saved)) return saved;
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        const ownerId = Array.from(bytes, (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        localStorage.setItem(SHEET_OWNER_ID_KEY, ownerId);
+        return ownerId;
+      }
+      function claimSheetName(url, name, ownerId) {
+        return new Promise((resolve, reject) => {
+          const callbackName = `__sheetClaim_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2)}`;
+          const script = document.createElement("script");
+          const endpoint = new URL(url);
+          endpoint.searchParams.set("action", "claim");
+          endpoint.searchParams.set("sheetName", name);
+          endpoint.searchParams.set("ownerId", ownerId);
+          endpoint.searchParams.set("callback", callbackName);
+          let settled = false;
+          let timeoutId;
+          const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            script.remove();
+            delete window[callbackName];
+            callback(value);
+          };
+          window[callbackName] = (result) => finish(resolve, result);
+          script.onerror = () =>
+            finish(reject, new Error("Could not reach the Apps Script URL."));
+          timeoutId = setTimeout(
+            () => finish(reject, new Error("The tab-name check timed out.")),
+            15000,
+          );
+          script.src = endpoint.toString();
+          document.head.appendChild(script);
+        });
+      }
       function scheduleSheetSave() {
         clearTimeout(sheetSaveTimer);
         if (!localStorage.getItem(SHEET_URL_KEY)) return;
@@ -928,11 +985,16 @@
         $("sheetStatus").textContent =
           "Sending current entries to Google Sheets…";
         try {
+          const requestPayload = payload || sheetPayload();
           await fetch(url, {
             method: "POST",
             mode: "no-cors",
             headers: { "Content-Type": "text/plain;charset=UTF-8" },
-            body: JSON.stringify(payload || sheetPayload()),
+            body: JSON.stringify({
+              ...requestPayload,
+              sheetName: requestPayload.sheetName || savedSheetName(),
+              ownerId: requestPayload.ownerId || sheetOwnerId(),
+            }),
           });
           $("sheetStatus").textContent =
             `Sync request sent. Check the “${savedSheetName()}” tab to confirm it arrived.`;
@@ -1004,11 +1066,19 @@
           r.open = !!r.open;
         });
         if (!rows.length) rows.push(newRow());
-        $("sheetUrl").value = localStorage.getItem(SHEET_URL_KEY) || "";
-        updateSheetConnectionUI();
-        if ($("sheetUrl").value)
+        const savedUrl = localStorage.getItem(SHEET_URL_KEY) || "";
+        if (savedUrl && !hasSheetOwnerId()) {
+          localStorage.removeItem(SHEET_URL_KEY);
+          $("sheetUrl").value = savedUrl;
           $("sheetStatus").textContent =
-            "Connected. Changes will be sent automatically.";
+            "Reconnect to reserve your tab and resume automatic saves.";
+        } else {
+          $("sheetUrl").value = savedUrl;
+          if (savedUrl)
+            $("sheetStatus").textContent =
+              "Connected. Changes will be sent automatically.";
+        }
+        updateSheetConnectionUI();
       }
 
       function updateSheetConnectionUI() {
@@ -1769,11 +1839,38 @@
       $("confirmSheetConnect").onclick = async () => {
         const name = $("sheetName").value.trim();
         if (!name || name.length > 100 || /[:\\/?*[\]]/.test(name)) {
+          $("sheetNameError").textContent =
+            "Use 1–100 characters. The name cannot contain : \\ / ? * [ ].";
           $("sheetNameError").hidden = false;
           $("sheetName").focus();
           return;
         }
         if (!pendingSheetUrl) return;
+        const button = $("confirmSheetConnect");
+        button.disabled = true;
+        $("sheetNameError").hidden = true;
+        $("sheetStatus").textContent = "Checking whether this tab name is available…";
+        try {
+          const ownerId = sheetOwnerId();
+          const claim = await claimSheetName(pendingSheetUrl, name, ownerId);
+          if (!claim || !claim.ok) {
+            $("sheetNameError").textContent =
+              claim && claim.code === "NAME_TAKEN"
+                ? "That tab name is already claimed. Choose a different name."
+                : "Could not verify this tab name. Check the URL and try again.";
+            $("sheetNameError").hidden = false;
+            $("sheetName").focus();
+            return;
+          }
+        } catch (error) {
+          $("sheetNameError").textContent =
+            "Could not verify this tab name. Check the URL and your internet connection.";
+          $("sheetNameError").hidden = false;
+          console.error("Could not claim Google Sheets tab", error);
+          return;
+        } finally {
+          button.disabled = false;
+        }
         localStorage.setItem(SHEET_NAME_KEY, name);
         localStorage.setItem(SHEET_URL_KEY, pendingSheetUrl);
         pendingSheetUrl = "";
@@ -1781,11 +1878,7 @@
         $("sheetStatus").textContent =
           "Connected. Sending current entries to Google Sheets…";
         $("connectSheetDialog").close();
-        await syncToSheet({
-          action: "rename",
-          sheetName: name,
-          ...sheetPayload(),
-        });
+        await syncToSheet(sheetPayload());
       };
       $("howTo").onclick = () => $("howToDialog").showModal();
       $("closeHowTo").onclick = () => $("howToDialog").close();
