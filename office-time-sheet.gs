@@ -1,4 +1,5 @@
 const SHEET_NAME = "Office Time Data";
+const SHEET_NAME_PROPERTY = "officeTimeSheetName";
 const HEADERS = [
   "Date",
   "Sign in",
@@ -30,7 +31,26 @@ function doPost(e) {
       throw new Error("This script must be bound to the target spreadsheet.");
     }
 
-    const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
+    const properties = PropertiesService.getScriptProperties();
+    let sheetName = properties.getProperty(SHEET_NAME_PROPERTY) || SHEET_NAME;
+    if (payload.action === "rename") {
+      const newName = validatedSheetName(payload.sheetName);
+      const currentSheet =
+        spreadsheet.getSheetByName(sheetName) ||
+        spreadsheet.getSheetByName(SHEET_NAME) ||
+        spreadsheet.insertSheet(SHEET_NAME);
+      const existingSheet = spreadsheet.getSheetByName(newName);
+      if (existingSheet && existingSheet.getSheetId() !== currentSheet.getSheetId()) {
+        throw new Error("A sheet with that name already exists.");
+      }
+      currentSheet.setName(newName);
+      properties.setProperty(SHEET_NAME_PROPERTY, newName);
+      sheetName = newName;
+    } else if (payload.action !== undefined && payload.action !== "sync") {
+      throw new Error("Unsupported action.");
+    }
+
+    const sheet = spreadsheet.getSheetByName(sheetName) || spreadsheet.insertSheet(sheetName);
     sheet.clear();
 
     const values = payload.rows.map(row => [
@@ -77,6 +97,14 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function validatedSheetName(value) {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (!name || name.length > 100 || /[\\/:?*\[\]]/.test(name)) {
+    throw new Error("Invalid sheet name.");
+  }
+  return name;
 }
 
 function sheetDate(value, timezone) {
