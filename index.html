@@ -523,6 +523,9 @@
         gap: 8px;
         justify-content: flex-end;
       }
+      .sheet-connect-actions {
+        margin-top: 14px;
+      }
       button:disabled {
         cursor: not-allowed;
         opacity: 0.5;
@@ -652,7 +655,7 @@
               autocomplete="url"
             />
           </label>
-          <button class="pri" id="saveSheetUrl">Connect / Save URL</button>
+          <button class="pri" id="connectSheet">Connect</button>
           <button id="disconnectSheet">Disconnect</button>
           <button id="howTo">How to</button>
         </div>
@@ -678,6 +681,27 @@
         <div class="clear-actions">
           <button id="cancelDisconnect">Cancel</button>
           <button class="pri" id="confirmDisconnect">Disconnect</button>
+        </div>
+      </dialog>
+      <dialog
+        id="connectSheetDialog"
+        aria-labelledby="connectSheetDialogTitle"
+        aria-describedby="connectSheetDialogDescription"
+      >
+        <h2 id="connectSheetDialogTitle">Save sheet as</h2>
+        <p id="connectSheetDialogDescription">
+          Choose a name for the Google Sheets tab, then connect.
+        </p>
+        <label
+          >Sheet name
+          <input id="sheetName" type="text" maxlength="100" required />
+        </label>
+        <p id="sheetNameError" class="field-error" role="alert" hidden>
+          Use 1–100 characters. The name cannot contain : \ / ? * [ ].
+        </p>
+        <div class="clear-actions sheet-connect-actions">
+          <button id="cancelSheetConnect">Cancel</button>
+          <button class="pri" id="confirmSheetConnect">Connect</button>
         </div>
       </dialog>
       <dialog
@@ -719,7 +743,7 @@
           <li>
             Copy the Web app URL ending in <code>/exec</code>. Paste it into the
             Apps Script Web App URL field here and select
-            <strong>Connect / Save URL</strong>.
+            <strong>Connect</strong>, then choose the name for the data tab.
           </li>
           <li>
             Check the status message and the spreadsheet's
@@ -740,6 +764,9 @@
       const $ = (id) => document.getElementById(id);
       const KEY = "office-time-v1";
       const SHEET_URL_KEY = "office-time-sheet-url-v1";
+      const SHEET_NAME_KEY = "office-time-sheet-name-v1";
+      const DEFAULT_SHEET_NAME = "Office Time Data";
+      let pendingSheetUrl = "";
       let rows = [];
       let requiredMinutes = 480;
       let sheetSaveTimer;
@@ -879,6 +906,9 @@
           })),
         };
       }
+      function savedSheetName() {
+        return localStorage.getItem(SHEET_NAME_KEY) || DEFAULT_SHEET_NAME;
+      }
       function scheduleSheetSave() {
         clearTimeout(sheetSaveTimer);
         if (!localStorage.getItem(SHEET_URL_KEY)) return;
@@ -890,10 +920,10 @@
         if (sheetSyncing) {
           sheetSyncPending = true;
           sheetSyncPendingPayload = payload || null;
-          return;
+          return false;
         }
         const url = localStorage.getItem(SHEET_URL_KEY);
-        if (!url) return;
+        if (!url) return false;
         sheetSyncing = true;
         $("sheetStatus").textContent =
           "Sending current entries to Google Sheets…";
@@ -905,7 +935,8 @@
             body: JSON.stringify(payload || sheetPayload()),
           });
           $("sheetStatus").textContent =
-            "Sync request sent. Check the “Office Time Data” tab to confirm it arrived.";
+            `Sync request sent. Check the “${savedSheetName()}” tab to confirm it arrived.`;
+          return true;
         } catch (error) {
           $("sheetStatus").textContent =
             "Could not send data to Google Sheets. Check the URL and your internet connection.";
@@ -913,6 +944,7 @@
             "Could not sync office time data to Google Sheets",
             error,
           );
+          return false;
         } finally {
           sheetSyncing = false;
           if (sheetSyncPending) {
@@ -982,7 +1014,7 @@
       function updateSheetConnectionUI() {
         const connected = !!localStorage.getItem(SHEET_URL_KEY);
         $("sheetUrlField").hidden = connected;
-        $("saveSheetUrl").hidden = connected;
+        $("connectSheet").hidden = connected;
         $("disconnectSheet").hidden = !connected;
         $("howTo").hidden = connected;
       }
@@ -1712,7 +1744,7 @@
         save();
       });
       $("brk").addEventListener("input", save);
-      $("saveSheetUrl").onclick = () => {
+      $("connectSheet").onclick = () => {
         const url = $("sheetUrl").value.trim();
         if (!validSheetUrl(url)) {
           $("sheetStatus").textContent =
@@ -1720,15 +1752,40 @@
           $("sheetUrl").focus();
           return;
         }
-        localStorage.setItem(SHEET_URL_KEY, url);
-        updateSheetConnectionUI();
-        $("sheetStatus").textContent =
-          "Connected. Sending current entries to Google Sheets…";
-        syncToSheet();
+        pendingSheetUrl = url;
+        $("sheetName").value = savedSheetName();
+        $("sheetNameError").hidden = true;
+        $("connectSheetDialog").showModal();
+        $("sheetName").focus();
       };
       $("disconnectSheet").onclick = () => {
         if (!localStorage.getItem(SHEET_URL_KEY)) return;
         $("disconnectDialog").showModal();
+      };
+      $("cancelSheetConnect").onclick = () => {
+        pendingSheetUrl = "";
+        $("connectSheetDialog").close();
+      };
+      $("confirmSheetConnect").onclick = async () => {
+        const name = $("sheetName").value.trim();
+        if (!name || name.length > 100 || /[:\\/?*[\]]/.test(name)) {
+          $("sheetNameError").hidden = false;
+          $("sheetName").focus();
+          return;
+        }
+        if (!pendingSheetUrl) return;
+        localStorage.setItem(SHEET_NAME_KEY, name);
+        localStorage.setItem(SHEET_URL_KEY, pendingSheetUrl);
+        pendingSheetUrl = "";
+        updateSheetConnectionUI();
+        $("sheetStatus").textContent =
+          "Connected. Sending current entries to Google Sheets…";
+        $("connectSheetDialog").close();
+        await syncToSheet({
+          action: "rename",
+          sheetName: name,
+          ...sheetPayload(),
+        });
       };
       $("howTo").onclick = () => $("howToDialog").showModal();
       $("closeHowTo").onclick = () => $("howToDialog").close();
