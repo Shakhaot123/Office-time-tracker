@@ -186,6 +186,9 @@
         transform: translateY(-50%);
       }
       @supports (-moz-appearance: none) {
+        .picker-field > input[type="time"] {
+          caret-color: transparent;
+        }
         .picker-trigger::before {
           position: absolute;
           top: 0;
@@ -727,7 +730,7 @@
           </label>
           <button class="pri" id="connectSheet">Connect</button>
           <button id="disconnectSheet">Disconnect</button>
-          <button id="howTo">How to</button>
+          <button id="howTo">Setup guide</button>
         </div>
         <p id="sheetStatus" class="sheet-status" aria-live="polite">
           Not connected. Your entries are saved in this browser only.
@@ -810,6 +813,10 @@
             <strong>Extensions &gt; Apps Script</strong>. Open the provided
             <code>office-time-sheet.gs</code> file, copy its contents into the
             Apps Script editor's <code>Code.gs</code>, then save.
+            <p>
+              <button class="pri" id="copySheetCode">Copy Apps Script code</button>
+              <span id="copySheetCodeStatus" class="sheet-status" aria-live="polite"></span>
+            </p>
           </li>
           <li>
             Choose <strong>Deploy &gt; New deployment</strong>, select the gear
@@ -1190,7 +1197,7 @@
             ? `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M8 3.5v4M16 3.5v4M3.5 9.5h17"></path></svg>`
             : `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7v5l3 2"></path></svg>`;
         const inputClass = className ? ` class="${className}"` : "";
-        return `<span class="picker-field"><input${inputClass} type="${type}" value="${escapeAttribute(value)}" aria-label="${label}"><button type="button" class="picker-trigger" aria-label="Open ${type === "date" ? "calendar" : "time picker"}">${icon}</button></span>`;
+        return `<span class="picker-field"><input${inputClass} type="${type}" value="${escapeAttribute(value)}" aria-label="${label}"><button type="button" class="picker-trigger" tabindex="-1" aria-label="Open ${type === "date" ? "calendar" : "time picker"}">${icon}</button></span>`;
       }
 
       function render() {
@@ -2002,6 +2009,27 @@
       };
       $("howTo").onclick = () => $("howToDialog").showModal();
       $("closeHowTo").onclick = () => $("howToDialog").close();
+      $("copySheetCode").onclick = async () => {
+        const button = $("copySheetCode");
+        const status = $("copySheetCodeStatus");
+        button.disabled = true;
+        status.textContent = "Loading Apps Script code…";
+        try {
+          const response = await fetch("./office-time-sheet.gs", {
+            cache: "no-cache",
+          });
+          if (!response.ok)
+            throw new Error(`Could not load Apps Script code (${response.status}).`);
+          await copyReportToClipboard(await response.text());
+          status.textContent = "Code copied. Paste it into Code.gs.";
+        } catch (error) {
+          status.textContent =
+            "Could not copy the code. Check your connection and try again.";
+          console.error("Could not copy Apps Script code", error);
+        } finally {
+          button.disabled = false;
+        }
+      };
       $("cancelDisconnect").onclick = () => $("disconnectDialog").close();
       $("confirmDisconnect").onclick = () => {
         clearTimeout(sheetSaveTimer);
